@@ -1,0 +1,168 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Job 1: Linting and Code Quality
+  lint:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black
+    
+    - name: Run Black (Code Formatter)
+      run: |
+        black --check src/ || true
+    
+    - name: Run Flake8 (Linter)
+      run: |
+        flake8 src/ --max-line-length=120 --ignore=E501,W503 || true
+
+  # Job 2: Unit Tests
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Create test data
+      run: |
+        mkdir -p data/raw data/processed data/features
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/ --cov=src --cov-report=xml --cov-report=term || true
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+      continue-on-error: true
+
+  # Job 3: Build Docker Images
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build Training Image
+      run: |
+        docker build -f docker/Dockerfile.train -t network-security-train:latest .
+    
+    - name: Build API Image
+      run: |
+        docker build -f docker/Dockerfile.serve -t network-security-api:latest .
+    
+    - name: Test API Container
+      run: |
+        docker run -d --name test-api -p 8000:8000 network-security-api:latest
+        sleep 10
+        curl -f http://localhost:8000/health || exit 1
+        docker stop test-api
+        docker rm test-api
+
+  # Job 4: Deploy (only on main branch)
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Deploy notification
+      run: |
+        echo "🚀 Deploying to production..."
+        echo "This is where you would deploy to your cloud platform"
+        echo "Examples: AWS ECS, Google Cloud Run, Azure Container Instances, etc."
+    
+    # Example: Deploy to AWS ECR (uncomment and configure)
+    # - name: Configure AWS credentials
+    #   uses: aws-actions/configure-aws-credentials@v2
+    #   with:
+    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    #     aws-region: us-east-1
+    #
+    # - name: Login to Amazon ECR
+    #   id: login-ecr
+    #   uses: aws-actions/amazon-ecr-login@v1
+    #
+    # - name: Build and push to ECR
+    #   run: |
+    #     docker build -f docker/Dockerfile.serve -t $ECR_REGISTRY/network-security-api:latest .
+    #     docker push $ECR_REGISTRY/network-security-api:latest
+
+  # Job 5: Model Training (scheduled)
+  scheduled-training:
+    name: Scheduled Model Retraining
+    runs-on: ubuntu-latest
+    # Run weekly on Sundays at midnight
+    # schedule:
+    #   - cron: '0 0 * * 0'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run training pipeline
+      run: |
+        python main.py
+      continue-on-error: true
+    
+    - name: Upload model artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: trained-models
+        path: src/models/saved_models/
+      continue-on-error: true

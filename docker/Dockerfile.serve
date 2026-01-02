@@ -1,0 +1,46 @@
+# Dockerfile for API Serving
+FROM python:3.10-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies (only needed for serving)
+RUN pip install --no-cache-dir \
+    fastapi==0.109.0 \
+    uvicorn==0.27.0 \
+    pydantic==2.5.3 \
+    pandas==2.1.4 \
+    numpy==1.26.2 \
+    scikit-learn==1.3.2 \
+    xgboost==2.0.3 \
+    lightgbm==4.1.0 \
+    joblib==1.3.2 \
+    pyyaml==6.0.1
+
+# Copy only necessary files for serving
+COPY src/ src/
+COPY data/features/ data/features/
+
+# Create logs directory
+RUN mkdir -p logs
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run API server
+CMD ["uvicorn", "src.serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
