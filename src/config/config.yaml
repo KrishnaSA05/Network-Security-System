@@ -1,8 +1,16 @@
 # Data Configuration
 data:
+  source: "csv"
   raw_data_path: "data/raw/phisingData.csv"
   processed_data_path: "data/processed/cleaned_data.csv"
   feature_data_path: "data/features/engineered_features.csv"
+  
+  mongodb:
+    connection_string: "mongodb://localhost:27017/"
+    database_name: "network_security"
+    collection_name: "phishing_data"
+    batch_size: 1000
+  
   train_test_split: 0.2
   random_state: 42
   target_column: "Result"
@@ -25,7 +33,7 @@ features:
     - "SuspiciousFeaturesCount"
     - "SSLAnchorInteraction"
 
-# Model Configuration (Default Parameters)
+# Model Configuration
 models:
   random_forest:
     n_estimators: 100
@@ -63,15 +71,14 @@ models:
 
 # Hyperparameter Tuning Configuration
 hyperparameter_tuning:
-  enable: False  # Set to True to enable hyperparameter tuning
-  method: "randomized"  # Options: "grid" or "randomized"
+  enable: False
+  method: "randomized"
   cv_folds: 5
-  n_iter: 50  # Number of iterations for RandomizedSearchCV
+  n_iter: 50
   scoring: "accuracy"
   n_jobs: -1
   verbose: 2
   
-  # Parameter grids for each model
   param_grids:
     random_forest:
       n_estimators: [50, 100, 200, 300]
@@ -113,7 +120,7 @@ training:
   scoring: "accuracy"
   save_model_path: "src/models/saved_models/"
   save_best_model_only: True
-  
+
 # Evaluation Metrics
 evaluation:
   metrics:
@@ -128,6 +135,57 @@ evaluation:
   save_plots: True
   plots_dir: "data/validation/"
 
+# MLflow Configuration
+mlflow:
+  enable: True  # Enable MLflow tracking
+  tracking_uri: "mlruns"  # Local directory for MLflow artifacts
+  experiment_name: "Network_Security_Phishing_Detection"
+  
+  # Auto-logging settings
+  autolog:
+    enable: True
+    log_models: True
+    log_input_examples: True
+    log_model_signatures: True
+  
+  # What to log
+  log_params: True
+  log_metrics: True
+  log_artifacts: True
+  log_confusion_matrix: True
+  log_feature_importance: True
+  
+  # Model registry
+  register_best_model: True
+  model_registry_uri: null  # Use same as tracking_uri if null
+  
+  # Tags
+  default_tags:
+    project: "Network Security System"
+    task: "Binary Classification"
+    dataset: "Phishing Detection"
+
+# Data Drift Monitoring Configuration
+data_drift:
+  enable: True
+  method: "ks_test"
+  reference_data_path: "data/features/engineered_features.csv"
+  threshold: 0.05
+  features_to_monitor: []
+  save_report: True
+  report_path: "data/validation/drift_report.json"
+  alert_on_drift: True
+
+# Monitoring Configuration
+monitoring:
+  enable: False
+  model_drift:
+    enable: False
+    threshold: 0.05
+  performance_monitoring:
+    enable: False
+    alert_threshold: 0.85
+
 # API Configuration
 api:
   host: "0.0.0.0"
@@ -136,22 +194,6 @@ api:
   title: "Network Security - Phishing Detection API"
   description: "ML API for detecting phishing websites"
   version: "1.0.0"
-
-# Monitoring Configuration
-monitoring:
-  enable: False  # Set to True to enable monitoring
-  data_drift:
-    enable: False
-    reference_data_path: "data/features/engineered_features.csv"
-    threshold: 0.05
-  
-  model_drift:
-    enable: False
-    threshold: 0.05
-  
-  performance_monitoring:
-    enable: False
-    alert_threshold: 0.85  # Alert if accuracy drops below this
 
 # Logging
 logging:

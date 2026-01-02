@@ -1,0 +1,34 @@
+# Core ML Libraries
+pandas==2.1.4
+numpy==1.26.2
+scikit-learn==1.3.2
+xgboost==2.0.3
+lightgbm==4.1.0
+
+# Data Validation & Drift Detection
+scipy==1.11.4
+evidently==0.4.13
+
+# MongoDB
+pymongo==4.6.1
+dnspython==4.4.2
+
+# MLflow for Experiment Tracking
+mlflow==2.9.2
+mlflow-skinny==2.9.2
+
+# Configuration
+pyyaml==6.0.1
+
+# API (for later phases)
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.3
+
+# Utilities
+python-dotenv==1.0.0
+joblib==1.3.2
+
+# Visualization
+matplotlib==3.8.2
+seaborn==0.13.0
