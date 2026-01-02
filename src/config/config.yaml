@@ -1,8 +1,161 @@
+# Data Configuration
 data:
-  raw_path: "data/raw/phishing.csv"
-  train_path: "data/processed/train.csv"
-  test_path: "data/processed/test.csv"
+  raw_data_path: "data/raw/phisingData.csv"
+  processed_data_path: "data/processed/cleaned_data.csv"
+  feature_data_path: "data/features/engineered_features.csv"
+  train_test_split: 0.2
+  random_state: 42
+  target_column: "Result"
 
-model:
-  path: "models/network_model.pkl"
-  target_column: "class"
+# Feature Engineering
+features:
+  drop_features:
+    - "popUpWidnow"
+    - "Favicon"
+    - "doubleslashredirecting"
+    - "ShortiningService"
+    - "port"
+  
+  engineered_features:
+    - "SSLDomainTrust"
+    - "URLSuspicionScore"
+    - "ContentCredibility"
+    - "DomainReputation"
+    - "SecurityFeaturesCount"
+    - "SuspiciousFeaturesCount"
+    - "SSLAnchorInteraction"
+
+# Model Configuration (Default Parameters)
+models:
+  random_forest:
+    n_estimators: 100
+    max_depth: null
+    min_samples_split: 2
+    min_samples_leaf: 1
+    random_state: 42
+    n_jobs: -1
+  
+  xgboost:
+    n_estimators: 100
+    learning_rate: 0.1
+    max_depth: 6
+    min_child_weight: 1
+    subsample: 1.0
+    colsample_bytree: 1.0
+    random_state: 42
+  
+  lightgbm:
+    n_estimators: 100
+    learning_rate: 0.1
+    max_depth: -1
+    num_leaves: 31
+    min_child_samples: 20
+    subsample: 1.0
+    colsample_bytree: 1.0
+    random_state: 42
+  
+  logistic_regression:
+    penalty: "l2"
+    C: 1.0
+    solver: "lbfgs"
+    max_iter: 1000
+    random_state: 42
+
+# Hyperparameter Tuning Configuration
+hyperparameter_tuning:
+  enable: False  # Set to True to enable hyperparameter tuning
+  method: "randomized"  # Options: "grid" or "randomized"
+  cv_folds: 5
+  n_iter: 50  # Number of iterations for RandomizedSearchCV
+  scoring: "accuracy"
+  n_jobs: -1
+  verbose: 2
+  
+  # Parameter grids for each model
+  param_grids:
+    random_forest:
+      n_estimators: [50, 100, 200, 300]
+      max_depth: [10, 20, 30, null]
+      min_samples_split: [2, 5, 10]
+      min_samples_leaf: [1, 2, 4]
+      max_features: ["sqrt", "log2"]
+      bootstrap: [True, False]
+    
+    xgboost:
+      n_estimators: [50, 100, 200, 300]
+      learning_rate: [0.01, 0.05, 0.1, 0.2]
+      max_depth: [3, 5, 7, 9]
+      min_child_weight: [1, 3, 5]
+      subsample: [0.6, 0.8, 1.0]
+      colsample_bytree: [0.6, 0.8, 1.0]
+      gamma: [0, 0.1, 0.2]
+    
+    lightgbm:
+      n_estimators: [50, 100, 200, 300]
+      learning_rate: [0.01, 0.05, 0.1, 0.2]
+      max_depth: [-1, 10, 20, 30]
+      num_leaves: [15, 31, 63, 127]
+      min_child_samples: [10, 20, 30]
+      subsample: [0.6, 0.8, 1.0]
+      colsample_bytree: [0.6, 0.8, 1.0]
+      reg_alpha: [0, 0.1, 0.5]
+      reg_lambda: [0, 0.1, 0.5]
+    
+    logistic_regression:
+      penalty: ["l1", "l2", "elasticnet"]
+      C: [0.001, 0.01, 0.1, 1, 10, 100]
+      solver: ["liblinear", "saga"]
+      max_iter: [1000, 2000, 3000]
+
+# Training Configuration
+training:
+  cv_folds: 5
+  scoring: "accuracy"
+  save_model_path: "src/models/saved_models/"
+  save_best_model_only: True
+  
+# Evaluation Metrics
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1_score"
+    - "roc_auc"
+  
+  classification_report: True
+  confusion_matrix: True
+  save_plots: True
+  plots_dir: "data/validation/"
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: True
+  title: "Network Security - Phishing Detection API"
+  description: "ML API for detecting phishing websites"
+  version: "1.0.0"
+
+# Monitoring Configuration
+monitoring:
+  enable: False  # Set to True to enable monitoring
+  data_drift:
+    enable: False
+    reference_data_path: "data/features/engineered_features.csv"
+    threshold: 0.05
+  
+  model_drift:
+    enable: False
+    threshold: 0.05
+  
+  performance_monitoring:
+    enable: False
+    alert_threshold: 0.85  # Alert if accuracy drops below this
+
+# Logging
+logging:
+  level: "INFO"
+  log_dir: "logs/"
+  log_file: "app.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

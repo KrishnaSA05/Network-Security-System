@@ -205,3 +205,45 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ========================
+# Python cache
+# ========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+**/__pycache__/
+
+# ========================
+# Logs & reports
+# ========================
+logs/
+*.log
+
+# ========================
+# Models / artifacts
+# ========================
+src/models/saved_models/
+*.pkl
+**/faiss_index.bin
+# ========================
+# Data
+# ========================
+data/raw/*.csv
+data/processed/*.csv
+data/features/*.csv
+data/validation/*.txt
+
+# ========================
+# MLflow
+# ========================
+mlflow/
+mlruns/
+**/mlflow/
+**/mlruns/
+
+# ========================
+# Some other files
+# ========================
+catboost_info/
