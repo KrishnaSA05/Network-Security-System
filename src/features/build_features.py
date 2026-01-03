@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from utils.logger import setup_logger, load_config
+from src.utils.logger import setup_logger, load_config
 
 logger = setup_logger(__name__, "logs/feature_engineering.log")
 
@@ -176,29 +176,38 @@ class FeatureEngineer:
         df.to_csv(self.feature_data_path, index=False)
         logger.info(f"Feature data saved to {self.feature_data_path}")
     
-    def save_feature_report(self, df_before, df_after, output_path="data/validation/feature_engineering_report.txt"):
+    def save_feature_report(self, df_original, df_final):
         """Save feature engineering report"""
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            f.write("="*50 + "\n")
+        report_path = Path("data/validation") / "feature_report.txt"
+    
+        with open(report_path, 'w', encoding='utf-8') as f:  # ← Added encoding='utf-8'
+            f.write("="*60 + "\n")
             f.write("FEATURE ENGINEERING REPORT\n")
-            f.write("="*50 + "\n\n")
-            f.write(f"Original features: {df_before.shape[1]}\n")
-            f.write(f"Final features: {df_after.shape[1]}\n")
-            f.write(f"Features dropped: {len(self.drop_features)}\n")
-            f.write(f"Features created: {df_after.shape[1] - df_before.shape[1] + len(self.drop_features)}\n\n")
-            
-            f.write("Engineered Features:\n")
-            for feature in self.config['features']['engineered_features']:
-                if feature in df_after.columns:
-                    f.write(f"  ✓ {feature}\n")
-                else:
-                    f.write(f"  ✗ {feature} (NOT FOUND)\n")
-            
-            f.write("\n" + "="*50 + "\n")
+            f.write("="*60 + "\n\n")
         
-        logger.info(f"Feature engineering report saved to {output_path}")
+            f.write(f"Original shape: {df_original.shape}\n")
+            f.write(f"Final shape: {df_final.shape}\n")
+            f.write(f"Features added: {df_final.shape[1] - df_original.shape[1]}\n\n")
+        
+            f.write("Dropped Features:\n")
+            dropped_features = self.config['features']['drop_features']
+            for feature in dropped_features:
+                if feature in df_original.columns:
+                    f.write(f"  - {feature}\n")
+            f.write("\n")
+        
+            f.write("Engineered Features:\n")
+            new_features = [col for col in df_final.columns if col not in df_original.columns]
+            for feature in new_features:
+                f.write(f"  [OK] {feature}\n")  # ← Changed ✓ to [OK]
+            f.write("\n")
+        
+            f.write("Feature Statistics:\n")
+            f.write(str(df_final.describe()) + "\n\n")
+        
+            f.write("="*60 + "\n")
+    
+        logger.info(f"Feature report saved to {report_path}")
     
     def run(self, df):
         """Run complete feature engineering pipeline"""

@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from utils.logger import setup_logger, load_config
+from src.utils.logger import setup_logger, load_config
 
 logger = setup_logger(__name__, "logs/data_drift.log")
 

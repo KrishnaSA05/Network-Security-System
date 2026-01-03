@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from utils.logger import setup_logger, load_config
+from src.utils.logger import setup_logger, load_config
 
 logger = setup_logger(__name__, "logs/preprocessing.log")
 

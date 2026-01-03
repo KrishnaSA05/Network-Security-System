@@ -1,375 +1,171 @@
 """
-Model Training Module with MLflow Integration
-Trains multiple ML models with experiment tracking
+Network Security System - Main Pipeline Orchestrator
+Runs the complete ML pipeline from data ingestion to model evaluation
 """
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-import joblib
+import sys
 from pathlib import Path
 from datetime import datetime
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
+
+# Add src to Python path
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+# Now import from src modules
 from utils.logger import setup_logger, load_config
-from utils.mlflow_helper import MLflowTracker
+from data_pipeline.ingest import DataIngestor
+from data_pipeline.preprocess import DataPreprocessor
+from data_pipeline.validate import DataValidator
+from features.build_features import FeatureEngineer
+from monitoring.data_drift import DataDriftDetector
+from training.train import ModelTrainer
+from training.evaluate import ModelEvaluator
 
-logger = setup_logger(__name__, "logs/training.log")
+# Initialize logger
+logger = setup_logger(__name__, "logs/pipeline.log")
 
-class ModelTrainer:
-    def __init__(self, config_path="src/config/config.yaml"):
-        """Initialize model trainer with configuration"""
-        self.config = load_config(config_path)
-        self.target_column = self.config['data']['target_column']
-        self.test_size = self.config['data']['train_test_split']
-        self.random_state = self.config['data']['random_state']
-        self.models_config = self.config['models']
-        self.tuning_config = self.config['hyperparameter_tuning']
-        self.save_path = self.config['training']['save_model_path']
-        
-        Path(self.save_path).mkdir(parents=True, exist_ok=True)
-        
-        self.models = {}
-        self.trained_models = {}
-        self.training_history = {}
-        
-        # Initialize MLflow tracker
-        self.mlflow_tracker = MLflowTracker(config_path)
-        
-    def load_data(self, data_path=None):
-        """Load feature-engineered data"""
-        if data_path is None:
-            data_path = self.config['data']['feature_data_path']
-        
-        logger.info(f"Loading data from: {data_path}")
-        df = pd.read_csv(data_path)
-        logger.info(f"Data loaded. Shape: {df.shape}")
-        
-        return df
-    
-    def split_data(self, df):
-        """Split data into train and test sets"""
-        logger.info("Splitting data into train/test sets...")
-        
-        X = df.drop(columns=[self.target_column])
-        y = df[self.target_column]
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, 
-            test_size=self.test_size, 
-            random_state=self.random_state,
-            stratify=y
-        )
-        
-        logger.info(f"Training set: {X_train.shape}")
-        logger.info(f"Test set: {X_test.shape}")
-        logger.info(f"Train class distribution:\n{y_train.value_counts()}")
-        logger.info(f"Test class distribution:\n{y_test.value_counts()}")
-        
-        # Log dataset info to MLflow
-        self.mlflow_tracker.log_params({
-            'dataset_total_samples': len(df),
-            'dataset_features': X_train.shape[1],
-            'train_samples': len(X_train),
-            'test_samples': len(X_test),
-            'test_size_ratio': self.test_size
-        })
-        
-        return X_train, X_test, y_train, y_test
-    
-    def initialize_models(self):
-        """Initialize all models with base parameters"""
-        logger.info("Initializing models...")
-        
-        self.models['random_forest'] = RandomForestClassifier(
-            **self.models_config['random_forest']
-        )
-        
-        xgb_params = self.models_config['xgboost'].copy()
-        self.models['xgboost'] = XGBClassifier(
-            **xgb_params,
-            eval_metric='logloss'
-        )
-        
-        lgbm_params = self.models_config['lightgbm'].copy()
-        self.models['lightgbm'] = LGBMClassifier(
-            **lgbm_params,
-            verbose=-1
-        )
-        
-        self.models['logistic_regression'] = LogisticRegression(
-            **self.models_config['logistic_regression']
-        )
-        
-        logger.info(f"Initialized {len(self.models)} models: {list(self.models.keys())}")
-    
-    def train_model(self, model_name, model, X_train, y_train, X_test, y_test):
-        """Train a single model with MLflow tracking"""
-        logger.info(f"Training {model_name}...")
-        
-        # Start MLflow run
-        run_name = f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        self.mlflow_tracker.start_run(
-            run_name=run_name,
-            tags={'model_type': model_name}
-        )
+
+def run_complete_pipeline():
+    """Execute the complete ML pipeline"""
+    try:
+        logger.info("="*60)
+        logger.info("STARTING COMPLETE ML PIPELINE")
+        logger.info("="*60)
         
         start_time = datetime.now()
         
-        try:
-            # Log model parameters
-            params = model.get_params()
-            self.mlflow_tracker.log_params(params)
-            
-            # Train model
-            model.fit(X_train, y_train)
-            
-            end_time = datetime.now()
-            training_time = (end_time - start_time).total_seconds()
-            
-            # Log training time
-            self.mlflow_tracker.log_metric('training_time_seconds', training_time)
-            
-            # Quick evaluation on train and test
-            from sklearn.metrics import accuracy_score
-            train_acc = accuracy_score(y_train, model.predict(X_train))
-            test_acc = accuracy_score(y_test, model.predict(X_test))
-            
-            self.mlflow_tracker.log_metrics({
-                'train_accuracy': train_acc,
-                'test_accuracy': test_acc
-            })
-            
-            logger.info(f"✓ {model_name} trained successfully in {training_time:.2f}s")
-            logger.info(f"  Train Accuracy: {train_acc:.4f}")
-            logger.info(f"  Test Accuracy: {test_acc:.4f}")
-            
-            # Log feature importance
-            if hasattr(model, 'feature_importances_'):
-                self.mlflow_tracker.log_feature_importance(
-                    model, 
-                    X_train.columns.tolist()
-                )
-            
-            # Store training info
-            self.training_history[model_name] = {
-                'training_time': training_time,
-                'timestamp': end_time.isoformat(),
-                'params': params,
-                'train_accuracy': train_acc,
-                'test_accuracy': test_acc,
-                'run_id': self.mlflow_tracker.get_run_id()
-            }
-            
-            # End MLflow run
-            self.mlflow_tracker.end_run()
-            
-            return model, True
-            
-        except Exception as e:
-            logger.error(f"✗ Error training {model_name}: {str(e)}")
-            self.mlflow_tracker.end_run()
-            return None, False
-    
-    def tune_hyperparameters(self, model_name, base_model, X_train, y_train):
-        """Perform hyperparameter tuning with MLflow tracking"""
-        logger.info(f"Starting hyperparameter tuning for {model_name}...")
+        # STEP 1: Data Ingestion
+        logger.info("\n[STEP 1/7] Data Ingestion")
+        logger.info("-" * 60)
+        ingestor = DataIngestor()
+        df = ingestor.run()
+        logger.info(f"✓ Data ingestion completed. Shape: {df.shape}")
         
-        # Start nested run for tuning
-        run_name = f"{model_name}_tuning_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        self.mlflow_tracker.start_run(
-            run_name=run_name,
-            tags={'model_type': model_name, 'phase': 'hyperparameter_tuning'}
-        )
+        # STEP 2: Data Preprocessing
+        logger.info("\n[STEP 2/7] Data Preprocessing")
+        logger.info("-" * 60)
+        preprocessor = DataPreprocessor()
+        df_clean = preprocessor.run(df)
+        logger.info(f"✓ Preprocessing completed. Shape: {df_clean.shape}")
         
-        param_grid = self.tuning_config['param_grids'][model_name]
-        cv_folds = self.tuning_config['cv_folds']
-        scoring = self.tuning_config['scoring']
-        n_jobs = self.tuning_config['n_jobs']
+        # STEP 3: Feature Engineering
+        logger.info("\n[STEP 3/7] Feature Engineering")
+        logger.info("-" * 60)
+        feature_engineer = FeatureEngineer()
+        df_features = feature_engineer.run(df_clean)
+        logger.info(f"✓ Feature engineering completed. Shape: {df_features.shape}")
         
-        # Log tuning configuration
-        self.mlflow_tracker.log_params({
-            'tuning_method': self.tuning_config['method'],
-            'cv_folds': cv_folds,
-            'scoring': scoring
-        })
+        # STEP 4: Data Drift Detection (optional)
+        config = load_config("src/config/config.yaml")
+        if config['data_drift']['enable']:
+            logger.info("\n[STEP 4/7] Data Drift Detection")
+            logger.info("-" * 60)
+            try:
+                drift_detector = DataDriftDetector()
+                
+                # Load reference and current data
+                import pandas as pd
+                reference_df = pd.read_csv(config['data_drift']['reference_data_path'])
+                current_df = pd.read_csv(config['data']['feature_data_path'])
+                
+                # Detect drift
+                drift_report = drift_detector.detect_drift(reference_df, current_df)
+                
+                # Save report
+                drift_detector.save_report(drift_report)
+                
+                logger.info("✓ Drift detection completed")
+                
+                if drift_report['drift_detected']:
+                    logger.warning(f"⚠ Drift detected in {len(drift_report['drifted_features'])} features")
+                else:
+                    logger.info("✓ No significant drift detected")
+                    
+            except FileNotFoundError as e:
+                logger.warning(f"Drift detection skipped: Reference data not found")
+                logger.info("Hint: Reference data will be created after first successful run")
+            except Exception as e:
+                logger.error(f"Drift detection failed: {e}")
+                logger.info("Continuing pipeline...")
+        else:
+            logger.info("\n[STEP 4/7] Data Drift Detection - SKIPPED (disabled in config)")
         
-        start_time = datetime.now()
+        # STEP 5: Data Validation
+        logger.info("\n[STEP 5/7] Data Validation")
+        logger.info("-" * 60)
+        validator = DataValidator()
+        validator.run(df_features)
+        logger.info("✓ Data validation completed")
         
-        try:
-            if self.tuning_config['method'] == 'grid':
-                logger.info(f"Using GridSearchCV with {cv_folds}-fold CV")
-                search = GridSearchCV(
-                    base_model,
-                    param_grid,
-                    cv=cv_folds,
-                    scoring=scoring,
-                    n_jobs=n_jobs,
-                    verbose=self.tuning_config['verbose']
-                )
-            else:
-                logger.info(f"Using RandomizedSearchCV with {self.tuning_config['n_iter']} iterations")
-                self.mlflow_tracker.log_param('n_iter', self.tuning_config['n_iter'])
-                search = RandomizedSearchCV(
-                    base_model,
-                    param_grid,
-                    n_iter=self.tuning_config['n_iter'],
-                    cv=cv_folds,
-                    scoring=scoring,
-                    n_jobs=n_jobs,
-                    random_state=self.random_state,
-                    verbose=self.tuning_config['verbose']
-                )
-            
-            search.fit(X_train, y_train)
-            
-            end_time = datetime.now()
-            tuning_time = (end_time - start_time).total_seconds()
-            
-            # Log best parameters and score
-            self.mlflow_tracker.log_params({
-                f'best_{k}': v for k, v in search.best_params_.items()
-            })
-            self.mlflow_tracker.log_metrics({
-                'best_cv_score': search.best_score_,
-                'tuning_time_seconds': tuning_time
-            })
-            
-            logger.info(f"✓ Tuning completed in {tuning_time:.2f}s")
-            logger.info(f"Best score: {search.best_score_:.4f}")
-            logger.info(f"Best params: {search.best_params_}")
-            
-            # Store tuning info
-            self.training_history[model_name].update({
-                'tuning_time': tuning_time,
-                'best_score': search.best_score_,
-                'best_params': search.best_params_,
-                'tuned': True,
-                'tuning_run_id': self.mlflow_tracker.get_run_id()
-            })
-            
-            # End tuning run
-            self.mlflow_tracker.end_run()
-            
-            return search.best_estimator_, True
-            
-        except Exception as e:
-            logger.error(f"✗ Error tuning {model_name}: {str(e)}")
-            self.mlflow_tracker.end_run()
-            return base_model, False
-    
-    def train_all_models(self, X_train, y_train, X_test, y_test):
-        """Train all models with MLflow tracking"""
+        # STEP 6: Model Training
+        logger.info("\n[STEP 6/7] Model Training")
+        logger.info("-" * 60)
+        trainer = ModelTrainer()
+        trained_models, X_train, X_test, y_train, y_test = trainer.run()
+        logger.info(f"✓ Training completed. {len(trained_models)} models trained")
+        
+        # STEP 7: Model Evaluation
+        logger.info("\n[STEP 7/7] Model Evaluation")
+        logger.info("-" * 60)
+        evaluator = ModelEvaluator()
+        evaluator.run(trained_models, X_test, y_test)
+        logger.info("✓ Evaluation completed")
+        
+        # Pipeline Summary
+        end_time = datetime.now()
+        total_time = (end_time - start_time).total_seconds()
+        
+        logger.info("\n" + "="*60)
+        logger.info("PIPELINE COMPLETED SUCCESSFULLY!")
         logger.info("="*60)
-        logger.info("TRAINING ALL MODELS")
+        logger.info(f"Total execution time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+        logger.info(f"\nOutputs:")
+        logger.info(f"  - Processed data: {config['data']['processed_data_path']}")
+        logger.info(f"  - Feature data: {config['data']['feature_data_path']}")
+        logger.info(f"  - Models: {config['training']['save_model_path']}")
+        logger.info(f"  - Validation reports: data/validation/")
+        logger.info(f"  - Logs: logs/")
+        logger.info(f"\nNext steps:")
+        logger.info(f"  1. View MLflow UI: mlflow ui")
+        logger.info(f"  2. Start API: uvicorn src.serving.app:app --reload")
         logger.info("="*60)
         
-        tuning_enabled = self.tuning_config['enable']
+        print("\n" + "="*60)
+        print("✅ PIPELINE EXECUTION SUCCESSFUL!")
+        print("="*60)
+        print(f"Total time: {total_time:.2f}s")
+        print(f"Models trained: {len(trained_models)}")
+        print(f"\n📊 View results:")
+        print(f"   - MLflow UI: mlflow ui")
+        print(f"   - Logs: logs/pipeline.log")
+        print("="*60)
         
-        for model_name, model in self.models.items():
-            logger.info(f"\n--- Training {model_name.upper()} ---")
-            
-            # Train base model
-            trained_model, success = self.train_model(
-                model_name, model, X_train, y_train, X_test, y_test
-            )
-            
-            if not success:
-                continue
-            
-            # Hyperparameter tuning (if enabled)
-            if tuning_enabled:
-                tuned_model, tuning_success = self.tune_hyperparameters(
-                    model_name, trained_model, X_train, y_train
-                )
-                if tuning_success:
-                    trained_model = tuned_model
-            else:
-                self.training_history[model_name]['tuned'] = False
-            
-            # Store trained model
-            self.trained_models[model_name] = trained_model
+        return True
         
-        logger.info(f"\n✓ Successfully trained {len(self.trained_models)} models")
-    
-    def save_model(self, model_name, model):
-        """Save a trained model"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{model_name}_{timestamp}.pkl"
-        filepath = Path(self.save_path) / filename
+    except Exception as e:
+        logger.error(f"Pipeline failed with error: {str(e)}")
+        logger.exception("Full traceback:")
         
-        joblib.dump(model, filepath)
-        logger.info(f"Model saved: {filepath}")
+        print("\n" + "="*60)
+        print("❌ PIPELINE FAILED!")
+        print("="*60)
+        print(f"Error: {str(e)}")
+        print(f"Check logs: logs/pipeline.log")
+        print("="*60)
         
-        # Also save latest version
-        latest_path = Path(self.save_path) / f"{model_name}_latest.pkl"
-        joblib.dump(model, latest_path)
-        
-        return str(filepath)
-    
-    def save_all_models(self):
-        """Save all trained models"""
-        logger.info("Saving all trained models...")
-        
-        saved_paths = {}
-        for model_name, model in self.trained_models.items():
-            filepath = self.save_model(model_name, model)
-            saved_paths[model_name] = filepath
-        
-        logger.info(f"✓ Saved {len(saved_paths)} models")
-        return saved_paths
-    
-    def save_training_history(self):
-        """Save training history"""
-        history_path = Path(self.save_path) / "training_history.json"
-        
-        import json
-        with open(history_path, 'w') as f:
-            json.dump(self.training_history, f, indent=2)
-        
-        logger.info(f"Training history saved: {history_path}")
-    
-    def run(self, data_path=None):
-        """Run complete training pipeline"""
-        logger.info("="*60)
-        logger.info("STARTING MODEL TRAINING PIPELINE WITH MLFLOW")
-        logger.info("="*60)
-        
-        # Load data
-        df = self.load_data(data_path)
-        
-        # Split data
-        X_train, X_test, y_train, y_test = self.split_data(df)
-        
-        # Initialize models
-        self.initialize_models()
-        
-        # Train all models
-        self.train_all_models(X_train, y_train, X_test, y_test)
-        
-        # Save models
-        self.save_all_models()
-        
-        # Save history
-        self.save_training_history()
-        
-        logger.info("="*60)
-        logger.info("TRAINING PIPELINE COMPLETED!")
-        logger.info(f"✓ View experiments: mlflow ui --backend-store-uri {self.mlflow_tracker.mlflow_config['tracking_uri']}")
-        logger.info("="*60)
-        
-        return self.trained_models, X_train, X_test, y_train, y_test
+        return False
+
 
 if __name__ == "__main__":
-    trainer = ModelTrainer()
-    trained_models, X_train, X_test, y_train, y_test = trainer.run()
+    print("="*60)
+    print("NETWORK SECURITY SYSTEM - ML PIPELINE")
+    print("="*60)
+    print("Starting pipeline execution...")
+    print("")
     
-    print(f"\n Training completed!")
-    print(f"Trained models: {list(trained_models.keys())}")
-    print(f"Models saved to: {trainer.save_path}")
-    print(f"\n🔍 View MLflow UI:")
-    print(f"   mlflow ui --backend-store-uri mlruns")
-    print(f"   Then open: http://localhost:5000")
+    success = run_complete_pipeline()
+    
+    if success:
+        print("\n🎉 Pipeline completed successfully!")
+        exit(0)
+    else:
+        print("\n⚠️  Pipeline failed. Check logs for details.")
+        exit(1)

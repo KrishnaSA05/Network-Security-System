@@ -75,6 +75,12 @@ class MLflowTracker:
         if not self.enabled:
             return None
         
+        # End any existing active run first
+        try:
+            mlflow.end_run()
+        except:
+            pass
+
         # Merge default tags with custom tags
         all_tags = self.mlflow_config.get('default_tags', {}).copy()
         if tags:
@@ -285,7 +291,9 @@ class MLflowTracker:
     
     def get_run_id(self):
         """Get current run ID"""
-        if self.active_run:
+        if not self.enabled:
+            return None
+        if hasattr(self, 'active_run') and self.active_run:
             return self.active_run.info.run_id
         return None
 
