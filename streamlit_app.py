@@ -12,9 +12,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 import sys
+import os
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent))
+# Get the project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
 # Page configuration
 st.set_page_config(
@@ -57,12 +59,16 @@ st.markdown("""
 def load_model_and_metadata():
     """Load the best model and its metadata"""
     try:
-        model_path = Path("src/models/saved_models/best_model.pkl")
-        metadata_path = Path("src/models/saved_models/best_model_metadata.json")
+        # Use absolute path from project root
+        model_path = PROJECT_ROOT / "src" / "models" / "saved_models" / "best_model.pkl"
+        metadata_path = PROJECT_ROOT / "src" / "models" / "saved_models" / "best_model_metadata.json"
+
+        st.info(f"Looking for model at: {model_path}")
 
         if not model_path.exists():
             st.error(f"❌ Model not found at: {model_path}")
             st.info("💡 Please run the training pipeline first: `python main.py`")
+            st.warning(f"Project root: {PROJECT_ROOT}")
             return None, None
 
         model = joblib.load(model_path)
@@ -71,6 +77,20 @@ def load_model_and_metadata():
         if metadata_path.exists():
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
+        else:
+            st.warning("⚠️ Metadata file not found. Using default values.")
+            metadata = {
+                'model_name': 'unknown',
+                'model_type': type(model).__name__,
+                'all_metrics': {
+                    'accuracy': 0.0,
+                    'precision': 0.0,
+                    'recall': 0.0,
+                    'f1_score': 0.0,
+                    'roc_auc': 0.0
+                },
+                'timestamp': 'Unknown'
+            }
 
         return model, metadata
 
@@ -317,7 +337,11 @@ def show_single_prediction_page(model, metadata):
         # Get probability if available
         if hasattr(model, 'predict_proba'):
             proba = model.predict_proba(df)[0]
-            probability_legitimate = proba[1] if len(proba) == 2 else proba[0]
+            # Handle different model outputs
+            if prediction in [0, 1]:  # XGBoost case
+                probability_legitimate = proba[1] if prediction == 1 else proba[0]
+            else:  # -1, 1 case
+                probability_legitimate = proba[1] if len(proba) == 2 else 0.5
         else:
             probability_legitimate = 1.0 if prediction == 1 else 0.0
 
@@ -334,10 +358,14 @@ def show_single_prediction_page(model, metadata):
 
         with col2:
             st.markdown("### Prediction")
-            if prediction == 1:
-                st.markdown('<p class="safe">✅ LEGITIMATE</p>', unsafe_allow_html=True)
-                st.success("This website appears safe")
-            else:
+            if prediction == 1 or prediction == 0:  # Handle both cases
+                if prediction == 1:
+                    st.markdown('<p class="safe">✅ LEGITIMATE</p>', unsafe_allow_html=True)
+                    st.success("This website appears safe")
+                else:
+                    st.markdown('<p class="phishing">⚠️ PHISHING</p>', unsafe_allow_html=True)
+                    st.error("This website appears malicious")
+            else:  # prediction == -1
                 st.markdown('<p class="phishing">⚠️ PHISHING</p>', unsafe_allow_html=True)
                 st.error("This website appears malicious")
 
@@ -396,11 +424,13 @@ def show_batch_prediction_page(model, metadata):
                 # Get probabilities
                 if hasattr(model, 'predict_proba'):
                     probabilities = model.predict_proba(df_processed)
-                    df['Probability_Legitimate'] = probabilities[:, 1]
+                    df['Probability_Legitimate'] = probabilities[:, 1] if probabilities.shape[1] == 2 else probabilities[:, 0]
                     df['Confidence'] = probabilities.max(axis=1)
 
                 df['Prediction'] = predictions
-                df['Prediction_Label'] = df['Prediction'].map({1: 'Legitimate', -1: 'Phishing'})
+                df['Prediction_Label'] = df['Prediction'].apply(
+                    lambda x: 'Legitimate' if x == 1 or x == 0 else 'Phishing'
+                )
 
                 # Summary statistics
                 st.markdown("---")
@@ -411,7 +441,7 @@ def show_batch_prediction_page(model, metadata):
                 with col1:
                     st.metric("Total URLs", len(df))
                 with col2:
-                    legitimate_count = (predictions == 1).sum()
+                    legitimate_count = ((predictions == 1) | (predictions == 0)).sum()
                     st.metric("✅ Legitimate", legitimate_count, 
                              delta=f"{legitimate_count/len(df)*100:.1f}%")
                 with col3:
