@@ -536,7 +536,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 **Krishna Ambekar**
 - GitHub: [KrishnaSA05](https://github.com/KrishnaSA05)
-- LinkedIn: [Krishna Ambekar](www.linkedin.com/in/krishna-ambekar-b4a2641b2)
+- LinkedIn: [Krishna Ambekar](https://www.linkedin.com/in/krishna-ambekar-b4a2641b2/) 
 - Email: krishnaambekar07@gmail.com
 
 ## 🙏 Acknowledgments
