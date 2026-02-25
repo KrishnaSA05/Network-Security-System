@@ -88,7 +88,7 @@ Network-Security-System/
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/network-security-system.git
+git clone https://github.com/KrishnaSA05/network-security-system.git
 cd network-security-system
 
 # Create virtual environment
@@ -535,9 +535,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 👤 Author
 
 **Your Name**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [Your Profile](https://linkedin.com/in/yourprofile)
-- Email: your.email@example.com
+- GitHub: [KrishnaSA05](https://github.com/KrishnaSA05)
+- LinkedIn: [Krishna Ambekar](www.linkedin.com/in/krishna-ambekar-b4a2641b2)
+- Email: krishnaambekar07@gmail.com
 
 ## 🙏 Acknowledgments
 
@@ -567,7 +567,5 @@ Future enhancements:
 ---
 
 ⭐️ **Star this repository if you find it helpful!**
-
-🔗 **Live Demo**: [Coming Soon]
 
 📖 **Full Documentation**: [docs/](docs/)
